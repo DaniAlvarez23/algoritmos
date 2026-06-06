@@ -1,0 +1,6 @@
+{
+  "name": "Aprendizaje Vibrante",
+  "description": "Ambiente de aprendizaje de algoritmos para estudiantes de grado 6° guiado por API el Robot Inteligente con andamiaje de orquestación docente.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
