@@ -16,6 +16,7 @@ interface LoginScreenProps {
 export default function LoginScreen({ onLogin, onGoogleLogin, isLoadingFirebase = false }: LoginScreenProps) {
   const [selectedRole, setSelectedRole] = useState<"student" | "teacher">("student");
   const [userName, setUserName] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,12 +29,31 @@ export default function LoginScreen({ onLogin, onGoogleLogin, isLoadingFirebase 
   };
 
   const handleGoogleClick = async () => {
+    setAuthError(null);
     try {
       if (onGoogleLogin) {
         await onGoogleLogin(selectedRole);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error in Google Sign-In: ", e);
+      const errMsg = e?.message || String(e);
+      let friendlyError = errMsg;
+
+      if (errMsg.includes("auth/unauthorized-domain") || errMsg.includes("unauthorized-domain")) {
+        friendlyError = `¡Ups! Este dominio no está autorizado en tu proyecto de Firebase.\n\n` +
+          `Para solucionarlo, debes agregar este dominio en tu Consola de Firebase -> Panel de Authentication -> pestaña 'Settings' o 'Ajustes' -> 'Authorized domains' o 'Dominios autorizados'.\n\n` +
+          `👉 Copia y pega exactamente este dominio:\n${window.location.hostname}`;
+      } else if (errMsg.includes("auth/popup-blocked") || errMsg.includes("popup-blocked")) {
+        friendlyError = "El navegador bloqueó la ventana emergente de inicio de sesión con Google.\n\n" +
+          "Por favor, haz clic en el icono de bloqueo de popups en tu barra de direcciones, permite las ventanas emergentes para esta página e inténtalo de nuevo.";
+      } else if (errMsg.includes("auth/operation-not-allowed") || errMsg.includes("operation-not-allowed")) {
+        friendlyError = "El inicio de sesión con Google no está habilitado en tu Firebase Authentication.\n\n" +
+          "Habilítalo yendo a la consola de Firebase -> Build -> Authentication -> pestaña 'Método de inicio de sesión' -> 'Agregar nuevo proveedor' -> selecciona 'Google' y actívalo.";
+      } else if (errMsg.includes("auth/internal-error")) {
+        friendlyError = "Ocurrió un error interno al conectar con los servidores de autenticación de Google. Por favor, vuelve a intentarlo.";
+      }
+
+      setAuthError(friendlyError);
     }
   };
 
@@ -153,6 +173,22 @@ export default function LoginScreen({ onLogin, onGoogleLogin, isLoadingFirebase 
             </svg>
             <span>{isLoadingFirebase ? "CONECTANDO..." : `Iniciar sesión oficial con Google (${selectedRole === 'student' ? 'Estudiante' : 'Docente'})`}</span>
           </button>
+
+          {authError && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-full text-left bg-red-50 text-red-800 border-2 border-red-300 rounded-[16px] p-3.5 my-2 text-xs font-sans whitespace-pre-wrap leading-relaxed shadow-sm relative"
+            >
+              <div className="flex gap-2">
+                <span className="text-sm">⚠️</span>
+                <div className="flex-1">
+                  <h4 className="font-extrabold text-[#984351] mb-1">Aviso de configuración:</h4>
+                  <p className="font-mono text-[11px] select-all tracking-tight leading-normal whitespace-pre-line">{authError}</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           <button
             type="button"

@@ -318,6 +318,7 @@ export default function App() {
       setActiveFrame(role === "student" ? "student" : "teacher");
     } catch (e) {
       console.error("Failed to login with Google:", e);
+      throw e;
     } finally {
       setIsLoadingFirebase(false);
     }
