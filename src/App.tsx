@@ -19,7 +19,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 
 import { ClassStudent, BlockCodeAST, ChatMessage, Mission } from "./types";
-import { INITIAL_MISSIONS, INITIAL_STUDENTS } from "./data";
+import { INITIAL_MISSIONS, INITIAL_STUDENTS, LEVELS_TRACK } from "./data";
 import LoginScreen from "./components/LoginScreen";
 import StudentApp from "./components/StudentApp";
 import TeacherDashboard from "./components/TeacherDashboard";
@@ -33,6 +33,7 @@ export default function App() {
   // Global shared synchronization state
   const [coins, setCoins] = useState(125);
   const [missions, setMissions] = useState<Mission[]>(INITIAL_MISSIONS);
+  const [levelsTrack, setLevelsTrack] = useState(LEVELS_TRACK);
   const [studentAST, setStudentAST] = useState<BlockCodeAST>({
     blocks: [
       { id: "b1", type: "al_empezar", next_block_id: "b2" },
@@ -50,6 +51,24 @@ export default function App() {
 
   // Roster lists for teachers
   const [studentsRoster, setStudentsRoster] = useState<ClassStudent[]>(INITIAL_STUDENTS);
+
+  // Compute active roster to keep Mateo Jiménez in sync with student panel updates in real-time
+  const activeRoster = studentsRoster.map(student => {
+    if (student.name === "Mateo Jiménez") {
+      const level2 = levelsTrack.find(l => l.id === 2);
+      const levelingProgress = level2 ? level2.progress : 60;
+      return {
+        ...student,
+        coins: coins,
+        levelingProgress: levelingProgress,
+        codeAST: studentAST,
+        chatHistory: chatHistory,
+        inactiveMinutes: 0,
+        status: (levelingProgress >= 100 ? "Excelente" : "En Progreso") as any
+      };
+    }
+    return student;
+  });
 
   // Manual role toggle for exploring both student & teacher consoles instantly!
   const [activeFrame, setActiveFrame] = useState<"student" | "teacher" | "about">("student");
@@ -173,6 +192,8 @@ export default function App() {
                 setCoins={setCoins}
                 missions={missions}
                 setMissions={setMissions}
+                levelsTrack={levelsTrack}
+                setLevelsTrack={setLevelsTrack}
                 studentAST={studentAST}
                 setStudentAST={setStudentAST}
                 chatHistory={chatHistory}
@@ -185,7 +206,7 @@ export default function App() {
               <TeacherDashboard
                 coachMode={coachMode}
                 setCoachMode={setCoachMode}
-                students={studentsRoster}
+                students={activeRoster}
                 setStudents={setStudentsRoster}
                 chatHistory={chatHistory}
                 setChatHistory={setChatHistory}

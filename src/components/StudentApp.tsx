@@ -26,14 +26,16 @@ import {
   FolderOpen
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { INITIAL_BLOCKS, INITIAL_MISSIONS, ACHIEVEMENTS } from "../data";
 import { CodeBlock, Mission, Achievement, BlockCodeAST, ChatMessage } from "../types";
-import { INITIAL_BLOCKS, INITIAL_MISSIONS, LEVELS_TRACK, ACHIEVEMENTS } from "../data";
 
 interface StudentAppProps {
   coins: number;
   setCoins: React.Dispatch<React.SetStateAction<number>>;
   missions: Mission[];
   setMissions: React.Dispatch<React.SetStateAction<Mission[]>>;
+  levelsTrack: any[];
+  setLevelsTrack: React.Dispatch<React.SetStateAction<any[]>>;
   studentAST: BlockCodeAST;
   setStudentAST: React.Dispatch<React.SetStateAction<BlockCodeAST>>;
   chatHistory: ChatMessage[];
@@ -46,6 +48,8 @@ export default function StudentApp({
   setCoins,
   missions,
   setMissions,
+  levelsTrack,
+  setLevelsTrack,
   studentAST,
   setStudentAST,
   chatHistory,
@@ -55,7 +59,10 @@ export default function StudentApp({
   // Navigation tabs inside student interface
   const [activeTab, setActiveTab] = useState<"misiones" | "lecciones" | "editor" | "simulacion" | "perfil">("misiones");
   
-  // Search & filter states for missions
+  // Selected level/challenge in the editor workspace (default is 2, since Level 2 "Chef de Bucles" is active)
+  const [selectedLevelId, setSelectedLevelId] = useState<number>(2);
+
+  // Search & filter states for misiones
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCriteria, setFilterCriteria] = useState<"todas" | "pendientes" | "completadas" | "altas_monedas">("todas");
 
@@ -78,6 +85,38 @@ export default function StudentApp({
   const [simStepsHistory, setSimStepsHistory] = useState<{ step: string; status: "success" | "pending" | "error" }[]>([]);
   const [simMessage, setSimMessage] = useState("¡Hola, parce! Prepara tu código en el Editor y haz clic en EJECUTAR para ver la magia.");
   const [simConfetti, setSimConfetti] = useState(false);
+
+  // Helper mapping Level ID to its block pack dynamically
+  const getBlocksForLevel = (levelId: number): CodeBlock[] => {
+    switch (levelId) {
+      case 2:
+        return [
+          { id: "al_empezar", type: "al_empezar", label: "Al empezar 🏁", color: "bg-[#FB92A1] text-[#261812]" },
+          { id: "verter_harina", type: "verter_harina", label: "Verter harina de maíz en tazón 🥣", color: "bg-[#FFF9E6] text-[#78350F]" },
+          { id: "agregar_agua_sal", type: "agregar_agua_sal", label: "Agregar agua templada con sal 🧂", color: "bg-[#E6F0FF] text-[#1E3A8A]" },
+          { id: "repetir_amasar", type: "repetir_amasar", label: "Repetir amasar 3 veces 🔄", color: "bg-[#FFF5D5] text-[#92400E]" },
+          { id: "asar_arepa", type: "asar_arepa", label: "Asar arepa en plancha caliente 🫓", color: "bg-[#FFEBF5] text-[#831843]" }
+        ];
+      case 3:
+        return [
+          { id: "al_empezar", type: "al_empezar", label: "Al empezar 🏁", color: "bg-[#FB92A1] text-[#261812]" },
+          { id: "apuntar_cancha", type: "apuntar_cancha", label: "Apuntar hacia la greda de la cancha 🎯", color: "bg-[#E6FFF5] text-[#065F46]" },
+          { id: "lanzar_tejo", type: "lanzar_tejo", label: "Lanzar tejo de metal con fuerza 💪", color: "bg-[#F1F5F9] text-[#1E293B]" },
+          { id: "si_golpea_mecha", type: "si_golpea_mecha", label: "Si el tejo golpea la mecha 💥", color: "bg-[#FFF0F0] text-[#991B1B]" },
+          { id: "celebrar_monona", type: "celebrar_monona", label: "Celebrar moñona y saludar 🎉", color: "bg-[#F3E8FF] text-[#5B21B6]" }
+        ];
+      case 1:
+      default:
+        return [
+          { id: "al_empezar", type: "al_empezar", label: "Al empezar 🏁", color: "bg-[#FB92A1] text-[#261812]" },
+          { id: "poner_olla", type: "poner_olla", label: "Poner olla con leche en estufa 🍲", color: "bg-[#F5DACF] text-[#400012]" },
+          { id: "esperar_hervir", type: "esperar_hervir", label: "Esperar a que hierva ⏳", color: "bg-[#E0BFBE] text-[#291616]" },
+          { id: "agregar_huevos", type: "agregar_huevos", label: "Agregar huevos 🥚", color: "bg-[#FFD9DD] text-[#400012]" },
+          { id: "agregar_calado", type: "agregar_calado", label: "Agregar calado (pan) 🍞", color: "bg-[#DBC1B7] text-[#261812]" },
+          { id: "picar_cilantro", type: "picar_cilantro", label: "Picar cilantro fresco 🌿", color: "bg-[#E2E2E9] text-[#1A1B20]" }
+        ];
+    }
+  };
 
   // Sync workspace blocks to studentAST for teacher visibility
   useEffect(() => {
@@ -157,24 +196,21 @@ export default function StudentApp({
     
     if (mission.id === "m1") {
       // "Preparar el tinto" - load pre-set block challenge
+      setSelectedLevelId(1);
+      setWorkspaceBlocks([]);
       setActiveTab("editor");
       if (coachMode !== "Silent") {
-        addChatMessage("api", "¡Listo para preparar el tinto! Necesitamos calentar la olla, echar el agua de panela, el café y colar. ¡Arma tu secuencia!");
+        addChatMessage("api", "¡Listo para preparar el tinto o la changua! Arma tu secuencia a continuación.");
       }
     } else if (mission.id === "m2") {
       // "Lanzar Tejo boyacense"
-      // increment progress
-      setMissions(prev => prev.map(m => {
-        if (m.id === "m2") {
-          const nextProg = m.progress + 1;
-          const isDone = nextProg >= m.maxProgress;
-          if (isDone) {
-            setCoins(c => c + m.coinsReward);
-          }
-          return { ...m, progress: nextProg, completed: isDone };
-        }
-        return m;
-      }));
+      // sets active challenge to Tejo (Level 3)
+      setSelectedLevelId(3);
+      setWorkspaceBlocks([]);
+      setActiveTab("editor");
+      if (coachMode !== "Silent") {
+        addChatMessage("api", "¡Epa! Prepárate para el campeonato de tejo profesional. Usa el condicional 'Si el tejo golpea la mecha' 💥 para estallar de emoción.");
+      }
     }
   };
 
@@ -192,95 +228,155 @@ export default function StudentApp({
     setSimStepIndex(-1);
     setSimConfetti(false);
 
-    // Dynamic sequence check
-    const sequenceTypes = workspaceBlocks.map(b => b.type);
-    
-    // Initialise simulation steps
-    const stepsTrack = [
-      { step: "Calentar la olla con leche", status: "pending" as const },
-      { step: "Hervir al punto perfecto", status: "pending" as const },
-      { step: "Cocinar los huevos suaves", status: "pending" as const },
-      { step: "Adicionar el calado crujiente", status: "pending" as const }
-    ];
+    // Initialise simulation steps based on current level challenge
+    let stepsTrack = [];
+    if (selectedLevelId === 2) {
+      stepsTrack = [
+        { step: "Echar harina en el tazón 🥣", status: "pending" as const },
+        { step: "Adicionar agua con sal 🧂", status: "pending" as const },
+        { step: "Hacer amasar en bucle 🔄", status: "pending" as const },
+        { step: "Poner en plancha caliente 🫓", status: "pending text-[#1A1B20]" as const }
+      ];
+    } else if (selectedLevelId === 3) {
+      stepsTrack = [
+        { step: "Fijar postura en greda 🎯", status: "pending" as const },
+        { step: "Impulsar el tejo de plomo 💪", status: "pending" as const },
+        { step: "Evaluar si golpeó la mecha 💥", status: "pending" as const },
+        { step: "Estallar pólvora y festejar 🎉", status: "pending" as const }
+      ];
+    } else {
+      stepsTrack = [
+        { step: "Calentar la olla con leche 🥛", status: "pending" as const },
+        { step: "Hervir al punto perfecto ⏳", status: "pending" as const },
+        { step: "Cocinar los huevos suaves 🥚", status: "pending" as const },
+        { step: "Adicionar el calado crujiente 🍞", status: "pending" as const }
+      ];
+    }
     setSimStepsHistory(stepsTrack);
 
-    // Let's call the server endpoint to evaluate if workspace is active, or use local sandbox
-    // Simulate steps with setTimeout
-    let currentStep = 0;
-    
-    // Core recipe logic: 
-    // 1. al_empezar
-    // 2. poner_olla
-    // 3. esperar_hervir
-    // 4. agregar_huevos
-    // 5. agregar_calado / picar_cilantro
-    const correctSeq = ["al_empezar", "poner_olla", "esperar_hervir", "agregar_huevos", "agregar_calado"];
+    // Call the server endpoint to evaluate if workspace is active, or use local sandbox
+    try {
+      const response = await fetch("/api/gemini/evaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          blocks: workspaceBlocks,
+          coachMode: coachMode,
+          levelId: selectedLevelId
+        })
+      });
 
-    const interval = setInterval(() => {
-      if (currentStep < 4) {
-        setSimStepIndex(currentStep);
-        const seqToMatch = correctSeq.slice(0, currentStep + 2); // al_empezar + next stages
-        const actualSeqSlice = sequenceTypes.slice(0, currentStep + 2);
-        
-        let hasError = false;
-        // Verify sequencing
-        if (sequenceTypes[0] !== "al_empezar") {
-          hasError = true;
-          setSimMessage("❌ Error: ¡No iniciaste con el bloque 🏁 'Al empezar'! El robot no sabe cuándo arrancar.");
-        } else if (currentStep === 0 && !sequenceTypes.includes("poner_olla")) {
-          hasError = true;
-          setSimMessage("❌ Error: Falta poner la olla en la estufa. ¡No podemos hervir leche en la nada!");
-        } else if (currentStep === 1 && sequenceTypes.indexOf("esperar_hervir") < sequenceTypes.indexOf("poner_olla")) {
-          hasError = true;
-          setSimMessage("❌ Error: ¡Echaste leche antes de prender el fuego o esperaste hervir sin olla! Se quemó el desayuno.");
-        } else if (currentStep === 2 && sequenceTypes.indexOf("agregar_huevos") < sequenceTypes.indexOf("esperar_hervir")) {
-          hasError = true;
-          setSimMessage("❌ Error: ¡Agregaste los huevos antes de que la leche hirviera! Quedó un caldo baboso crudo.");
-        }
+      const reqData = await response.json();
+      const isCorrect = reqData.scaffolding_evaluation?.is_correct_execution ?? false;
+      const errorType = reqData.scaffolding_evaluation?.error_type_detected ?? null;
+      const explanation = reqData.student_visible_response ?? "Ejecución correcta.";
 
-        if (hasError) {
-          setSimulationRunning(false);
-          setSimStepsHistory(prev => prev.map((s, idx) => idx === currentStep ? { ...s, status: "error" as const } : s));
-          clearInterval(interval);
+      // Let's animate steps
+      let currentStep = 0;
+      const interval = setInterval(() => {
+        if (currentStep < 4) {
+          setSimStepIndex(currentStep);
           
-          if (coachMode !== "Silent") {
-            let robotCritique = "¡Caray, mi llave! Los huevos quedaron crudos y la leche fría. Recuerda: 1. Al empezar 🏁 -> 2. Poner olla 🍲 -> 3. Esperar a que hierva ⏳. ¡Intenta reordenar los bloques!";
-            if (coachMode === "Technical") {
-              robotCritique = "ANÁLISIS ESTÁTICO (Modo Técnico): Ocurrió una transgresión de flujo secuencial. Condición temporal fallida. El subproceso 'agregar_huevos' requiere la precondición 'esperar_hervir' activa.";
+          // Determine if this step fails due to compilation block order
+          let isStepError = false;
+          if (!isCorrect) {
+            if (selectedLevelId === 2) {
+              if (errorType === "sin_harina" && currentStep === 0) isStepError = true;
+              if (errorType === "agua_antes_harina" && currentStep === 1) isStepError = true;
+              if (errorType === "sin_amasar" && currentStep === 2) isStepError = true;
+              if (errorType === "asar_antes_amasar" && currentStep === 3) isStepError = true;
+            } else if (selectedLevelId === 3) {
+              if (errorType === "sin_apuntar" && currentStep === 0) isStepError = true;
+              if (errorType === "lanzar_antes_apuntar" && currentStep === 1) isStepError = true;
+              if (errorType === "sin_condicion_mecha" && currentStep === 2) isStepError = true;
+              if (errorType === "celebrar_antes_mecha" && currentStep === 3) isStepError = true;
+            } else {
+              if (errorType === "sin_olla" && currentStep === 0) isStepError = true;
+              if (errorType === "orden_hervir_fallido" && currentStep === 1) isStepError = true;
+              if (errorType === "huevos_sin_hervir" && currentStep === 2) isStepError = true;
+              if (errorType === "huevos_pre_hervir" && currentStep === 2) isStepError = true;
+              if (errorType === "falta_calado" && currentStep === 3) isStepError = true;
             }
-            addChatMessage("api", robotCritique);
+            // Fallback: failed instantly on step 0
+            if ((errorType === "lienzo_vacio" || errorType === "sin_inicio") && currentStep === 0) {
+              isStepError = true;
+            }
           }
-          return;
-        }
 
-        // Advance step
-        setSimStepsHistory(prev => prev.map((s, idx) => idx === currentStep ? { ...s, status: "success" as const } : s));
-        setSimProgress((prev) => Math.min(prev + 25, 100));
+          if (isStepError) {
+            setSimulationRunning(false);
+            setSimStepsHistory(prev => prev.map((s, idx) => idx === currentStep ? { ...s, status: "error" as const } : s));
+            clearInterval(interval);
+            setSimMessage(`❌ ${explanation}`);
+            addChatMessage("api", explanation);
+            return;
+          }
 
-        let stepText = "";
-        switch (currentStep) {
-          case 0: stepText = "La estufa está encendida. La olla con leche, sal y agua se calienta lentamente."; break;
-          case 1: stepText = "¡Esa leche ya está hirviendo, subiendo con espuma! Ahora toca el huevo."; break;
-          case 2: stepText = "Echamos los huevos despacito. Esperando 3 minutos a que cuajen perfectamente."; break;
-          case 3: stepText = "Agregando el calado boyacense de pan crujiente y espolvoreando cilantro verde sabroso. ¡Rico!"; break;
+          // Step matches okay!
+          setSimStepsHistory(prev => prev.map((s, idx) => idx === currentStep ? { ...s, status: "success" as const } : s));
+          setSimProgress((prev) => Math.min(prev + 25, 100));
+
+          let stepText = "";
+          if (selectedLevelId === 2) {
+            switch (currentStep) {
+              case 0: stepText = "Añadiste la harina de maíz pre-cocida amarilla al tazón."; break;
+              case 1: stepText = "Vertiste el agua tibia salada con pedacitos de mantequilla derritiéndose."; break;
+              case 2: stepText = "Amasaste vigorosamente la masa con el ciclo bucle. Quedó súper suave."; break;
+              case 3: stepText = "Colocaste las arepas en el budare caliente para asarlas."; break;
+            }
+          } else if (selectedLevelId === 3) {
+            switch (currentStep) {
+              case 0: stepText = "Te paraste firme fijando la greda húmeda en el fondo."; break;
+              case 1: stepText = "Lanzaste el tejo metálico pesado girando en el aire."; break;
+              case 2: stepText = "El tejo va cayendo justo en el centro de la cancha."; break;
+              case 3: stepText = "¡Toca evaluar la mecha!"; break;
+            }
+          } else {
+            switch (currentStep) {
+              case 0: stepText = "La estufa está encendida. La olla con leche, sal y agua se calienta lentamente."; break;
+              case 1: stepText = "¡Esa leche ya está hirviendo, subiendo con espuma! Ahora toca el huevo."; break;
+              case 2: stepText = "Echamos los huevos despacito. Esperando 3 minutos a que cuajen perfectamente."; break;
+              case 3: stepText = "Agregando el calado boyacense de pan crujiente y espolvoreando cilantro verde sabroso."; break;
+            }
+          }
+          setSimMessage(`🔥 Acción: ${stepText}`);
+          currentStep++;
+        } else {
+          // Success! Complete
+          setSimulationRunning(false);
+          setSimProgress(100);
+          setSimConfetti(true);
+          setSimMessage(`🎉 ¡ÉXITO! ${explanation}`);
+          clearInterval(interval);
+
+          // Add AI evaluation to live chat histories
+          addChatMessage("api", explanation);
+
+          // Calculate coin reward
+          const reward = selectedLevelId === 2 ? 50 : selectedLevelId === 3 ? 75 : 35;
+          setCoins(prev => prev + reward);
+
+          // Update stateful levelsTrack progress & status
+          setLevelsTrack(prev => {
+            return prev.map(level => {
+              if (level.id === selectedLevelId) {
+                return { ...level, progress: 100, status: "completado" as const };
+              }
+              // Unlock Level 3 once Level 2 is completed!
+              if (selectedLevelId === 2 && level.id === 3) {
+                return { ...level, status: "activo" as const, progress: 0 };
+              }
+              return level;
+            });
+          });
         }
-        setSimMessage(`🔥 cocinando: ${stepText}`);
-        currentStep++;
-      } else {
-        // Complete!
-        setSimulationRunning(false);
-        setSimProgress(100);
-        setSimConfetti(true);
-        setSimMessage("🎉 ¡ÉXITO! Serviste una changua bogotana espectacular en plato de barro. ¡Pura sazón de la abuela!");
-        clearInterval(interval);
-        
-        // Reward
-        setCoins(prev => prev + 35);
-        if (coachMode !== "Silent") {
-          addChatMessage("api", "¡Qué berraquera, parce! Lograste ordenar los bloques con una precisión de chef profesional de la Sabana. ¡Completaste el Nivel 1!");
-        }
-      }
-    }, 1800);
+      }, 1500);
+
+    } catch (err) {
+      console.error("Simulation error querying API evaluation:", err);
+      setSimulationRunning(false);
+      setSimMessage("🚫 Ocurrió un error consultando al robot pedagógico virtual. Inténtalo de nuevo.");
+    }
   };
 
   return (
@@ -591,7 +687,7 @@ export default function StudentApp({
 
                   {/* Level map track */}
                   <div className="relative border-l-4 border-dashed border-[#6E5A52] pl-8 ml-6 py-4 space-y-8">
-                    {LEVELS_TRACK.map((level, idx) => (
+                    {levelsTrack.map((level, idx) => (
                       <div key={level.id} className="relative">
                         {/* Dot marker */}
                         <div className={`absolute -left-[45px] top-4 w-8 h-8 rounded-full border-3 border-[#6E5A52] flex items-center justify-center font-bold text-xs shadow-sm bg-white ${
@@ -636,12 +732,16 @@ export default function StudentApp({
                             </div>
                           </div>
 
-                          {level.status === "activo" && (
+                          {(level.status === "activo" || level.status === "completado") && (
                             <button
-                              onClick={() => setActiveTab("editor")}
-                              className="mt-4 px-4 py-1.5 bg-[#984351] hover:bg-[#7e2c39] text-white border-2 border-black rounded-lg text-xs font-bold shadow-[2px_2px_0px_0px_#000] flex items-center gap-1 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none cursor-pointer"
+                              onClick={() => {
+                                setSelectedLevelId(level.id);
+                                setWorkspaceBlocks([]);
+                                setActiveTab("editor");
+                              }}
+                              className="mt-4 px-4 py-1.5 bg-[#984351] hover:bg-[#7e2c39] text-white border-2 border-black rounded-lg text-xs font-bold shadow-[2px_2px_0px_0px_#000] flex items-center gap-1 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none cursor-pointer animate-pulse"
                             >
-                              <span>CONOCER ALGORITMO</span>
+                              <span>{level.status === "completado" ? "REPETIR RETO" : "EMPEZAR DESAFÍO"}</span>
                               <ArrowRight size={12} />
                             </button>
                           )}
@@ -658,14 +758,38 @@ export default function StudentApp({
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b-2 border-gray-300 pb-2 gap-4">
                     <div>
                       <h3 className="text-2xl font-extrabold font-serif text-[#984351]">
-                        Reto de la Changua 🍲
+                        {selectedLevelId === 2 ? "Reto de la Arepa Amasada 🫓" : selectedLevelId === 3 ? "Reto del Tejo con Mecha 🎯" : "Reto de la Changua 🍲"}
                       </h3>
                       <p className="text-xs font-semibold text-gray-600">
-                        Misión: Ordena los bloques para preparar el desayuno tradicional bogotano perfecto.
+                        {selectedLevelId === 2 
+                          ? "Misión: Amasa una arepa boyacense calentita con un bucle de repeticiones." 
+                          : selectedLevelId === 3 
+                          ? "Misión: Usa lógica condicional para lanzar el tejo y hacer Moñona." 
+                          : "Misión: Ordena los bloques para preparar el desayuno tradicional bogotano perfecto."
+                        }
                       </p>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
+                      {/* Challenge level switcher */}
+                      <div className="flex items-center gap-1.5 bg-[#EDEDF4] border-2 border-[#6E5A52] rounded-xl px-3 py-1.5 text-xs">
+                        <span className="font-bold text-gray-500 uppercase font-mono text-[9px]">Nivel:</span>
+                        <select
+                          value={selectedLevelId}
+                          onChange={(e) => {
+                            setSelectedLevelId(Number(e.target.value));
+                            setWorkspaceBlocks([]);
+                          }}
+                          className="font-bold bg-transparent focus:outline-none cursor-pointer text-[#984351]"
+                        >
+                          <option value={1}>🍲 Changua (Nivel 1)</option>
+                          <option value={2}>🫓 Arepa (Nivel 2)</option>
+                          {levelsTrack.find(l => l.id === 3)?.status !== "bloqueado" && (
+                            <option value={3}>🎯 Tejo (Nivel 3)</option>
+                          )}
+                        </select>
+                      </div>
+
                       <button
                         onClick={() => runCodeSimulation()}
                         disabled={workspaceBlocks.length === 0}
@@ -696,7 +820,7 @@ export default function StudentApp({
                       </div>
 
                       <div className="space-y-2">
-                        {INITIAL_BLOCKS.map(block => (
+                        {getBlocksForLevel(selectedLevelId).map(block => (
                           <div
                             key={block.id}
                             onClick={() => addBlockToWorkspace(block)}
@@ -778,14 +902,19 @@ export default function StudentApp({
               )}
 
               {activeTab === "simulacion" && (
-                <div className="space-y-6">
+                <div className="space-y-6 flex-1">
                   <div className="flex flex-col sm:flex-row justify-between items-start border-b-2 border-gray-300 pb-2 gap-4">
                     <div>
                       <h3 className="text-2xl font-extrabold font-serif text-[#984351]">
-                        Simulador de Cocina 🍲
+                        {selectedLevelId === 2 ? "Simulador de Arepas 🫓" : selectedLevelId === 3 ? "Simulador de Tejo 🎯" : "Simulador de Cocina 🍲"}
                       </h3>
                       <p className="text-xs font-semibold text-gray-600">
-                        Ejecuta tu código para ver si cocinas correctamente la receta tradicional de Changua.
+                        {selectedLevelId === 2 
+                          ? "Ejecuta tu código para ver si amasas y cocinas una arepa boyacense perfectamente." 
+                          : selectedLevelId === 3 
+                          ? "Ejecuta tu código para ver si golpeas la mecha con pólvora para estallar la cancha." 
+                          : "Ejecuta tu código para ver si cocinas correctamente la receta tradicional de Changua."
+                        }
                       </p>
                     </div>
 
@@ -804,23 +933,35 @@ export default function StudentApp({
                     {/* Left: Ingredients & Steps status Checklist */}
                     <div className="lg:col-span-5 bg-white border-3 border-[#6E5A52] rounded-[24px] p-5 shadow-[4px_4px_0px_0px_#6E5A52] space-y-4">
                       <div>
-                        <span className="font-mono text-[9px] text-gray-500 uppercase font-bold">Información de receta</span>
-                        <h4 className="font-extrabold text-sm text-[#1A1B20]">Broth & Ingredientes</h4>
+                        <span className="font-mono text-[9px] text-gray-500 uppercase font-bold">Información del Entorno</span>
+                        <h4 className="font-extrabold text-sm text-[#1A1B20]">
+                          {selectedLevelId === 2 ? "Ingredientes de la Arepa" : selectedLevelId === 3 ? "Partes de la Cancha" : "Ingredientes de la Changua"}
+                        </h4>
                       </div>
 
-                      {/* Ingredient list tags */}
+                      {/* Ingredient list tags helper */}
                       <div className="grid grid-cols-2 gap-2">
-                        {[
+                        {(selectedLevelId === 2 ? [
+                          { name: "Harina de maíz", icon: "🥣", status: simProgress >= 25 ? "agregado" : "esperando" },
+                          { name: "Agua tibia", icon: "🥛", status: simProgress >= 50 ? "agregado" : "esperando" },
+                          { name: "Queso campesino", icon: "🧀", status: simProgress >= 75 ? "agregado" : "esperando" },
+                          { name: "Mantequilla", icon: "🧈", status: simProgress >= 100 ? "agregado" : "esperando" }
+                        ] : selectedLevelId === 3 ? [
+                          { name: "Tejo de metal", icon: "💪", status: simProgress >= 25 ? "listo" : "esperando" },
+                          { name: "Greda húmeda", icon: "🎯", status: simProgress >= 50 ? "listo" : "esperando" },
+                          { name: "Mecha de pólvora", icon: "🔥", status: simProgress >= 75 ? "listo" : "esperando" },
+                          { name: "Moñona gloriosa", icon: "🎉", status: simProgress >= 100 ? "listo" : "esperando" }
+                        ] : [
                           { name: "Huevos", icon: "🥚", status: simProgress >= 75 ? "agregado" : "esperando" },
                           { name: "Leche fresca", icon: "🥛", status: simProgress >= 25 ? "agregado" : "esperando" },
                           { name: "Calado (Pan)", icon: "🍞", status: simProgress >= 100 ? "agregado" : "esperando" },
                           { name: "Cilantro picado", icon: "🌿", status: simProgress >= 100 ? "agregado" : "esperando" }
-                        ].map((ing, idx) => (
+                        ]).map((ing, idx) => (
                           <div key={idx} className="bg-[#EDEDF4] border border-[#6E5A52] p-2 rounded-xl flex items-center gap-2 text-xs font-bold text-[#1A1B20]">
                             <span className="text-lg">{ing.icon}</span>
                             <div className="flex-1">
                               <p className="leading-none">{ing.name}</p>
-                              <span className={`text-[8px] uppercase tracking-wider font-mono ${ing.status === "agregado" ? "text-green-600 font-extrabold" : "text-gray-400"}`}>
+                              <span className={`text-[8px] uppercase tracking-wider font-mono ${ing.status === "agregado" || ing.status === "listo" ? "text-green-600 font-extrabold" : "text-gray-400"}`}>
                                 {ing.status}
                               </span>
                             </div>
@@ -830,7 +971,7 @@ export default function StudentApp({
 
                       {/* Steps checklist items */}
                       <div className="border-t-2 border-dashed border-[#EDEDF4] pt-4 space-y-3">
-                        <span className="font-mono text-[9px] text-gray-500 uppercase font-bold">Progreso de cocina ({simProgress}%)</span>
+                        <span className="font-mono text-[9px] text-gray-500 uppercase font-bold">Progreso de ejecución ({simProgress}%)</span>
                         
                         <div className="w-full h-4 bg-gray-200 border-2 border-black rounded-full overflow-hidden mb-4">
                           <div
@@ -871,48 +1012,93 @@ export default function StudentApp({
                     <div className="lg:col-span-7 space-y-4">
                       <div className="bg-white border-3 border-[#6E5A52] rounded-[36px] p-10 shadow-[4px_4px_0px_0px_#6E5A52] flex flex-col items-center justify-center min-h-[350px] relative overflow-hidden">
                         {simConfetti && (
-                          <div className="absolute inset-0 bg-green-100/50 pointer-events-none flex flex-col items-center justify-center text-center p-4">
-                            <span className="text-5xl animate-bounce">🎉🍲🏆</span>
-                            <h4 className="font-bold text-lg text-green-800 mt-2 font-serif">¡EXCELENTE TRABAJO!</h4>
-                            <p className="text-xs text-green-700 font-bold font-mono">Consigue +35 Coins</p>
+                          <div className="absolute inset-0 bg-green-50/95 z-20 pointer-events-none flex flex-col items-center justify-center text-center p-6 animate-fade-in">
+                            <span className="text-6xl animate-bounce">
+                              {selectedLevelId === 2 ? "🫓🤠🏆" : selectedLevelId === 3 ? "💥🎯🏆" : "🎉🍲🏆"}
+                            </span>
+                            <h4 className="font-extrabold text-xl text-green-800 mt-3 font-serif uppercase tracking-tight">
+                              {selectedLevelId === 2 ? "¡AREPA PERFECTA!" : selectedLevelId === 3 ? "¡MONONA ESPECTACULAR!" : "¡CHANGUA LOGRADA!"}
+                            </h4>
+                            <p className="text-xs text-green-700 font-bold font-mono bg-green-100 px-3 py-1.5 border border-green-300 rounded-full mt-2">
+                              Consigues +{selectedLevelId === 2 ? 50 : selectedLevelId === 3 ? 75 : 35} Monedas de Oro 🪙
+                            </p>
                           </div>
                         )}
 
-                        {/* Heated steaming pot simulated illustration */}
                         <div className="relative">
-                          {/* Steam indicators */}
+                          {/* Steam/Blast indicators */}
                           {simulationRunning && (
                             <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex gap-4 text-gray-400">
-                              <span className="text-3xl animate-bounce" style={{ animationDelay: "0ms" }}>♨️</span>
-                              <span className="text-2xl animate-bounce" style={{ animationDelay: "300ms" }}>♨️</span>
-                              <span className="text-3xl animate-bounce" style={{ animationDelay: "150ms" }}>♨️</span>
+                              <span className="text-3xl animate-bounce" style={{ animationDelay: "0ms" }}>
+                                {selectedLevelId === 3 ? "✨" : "♨️"}
+                              </span>
+                              <span className="text-2xl animate-bounce" style={{ animationDelay: "300ms" }}>
+                                {selectedLevelId === 2 ? "🥖" : "♨️"}
+                              </span>
+                              <span className="text-3xl animate-bounce" style={{ animationDelay: "150ms" }}>
+                                {selectedLevelId === 3 ? "🧨" : "♨️"}
+                              </span>
                             </div>
                           )}
 
-                          {/* Cooking Pot */}
-                          <div className={`w-52 h-44 border-4 border-[#6E5A52] rounded-b-[48px] rounded-t-[16px] relative px-4 flex flex-col justify-end bg-gradient-to-b from-[#F5DACF] to-[#E0BFBE] shadow-[8px_8px_0px_0px_#6E5A52] transition-transform duration-300 ${
-                            simulationRunning ? "scale-105" : ""
-                          }`}>
-                            {/* Pot handles */}
-                            <div className="absolute left-[-20px] top-[40px] w-6 h-10 border-4 border-[#6E5A52] rounded-l-lg bg-[#E2E2E9]" />
-                            <div className="absolute right-[-20px] top-[40px] w-6 h-10 border-4 border-[#6E5A52] rounded-r-lg bg-[#E2E2E9]" />
-
-                            {/* Warm stove platform */}
-                            <div className="absolute bottom-[-16px] left-[-24px] right-[-24px] h-4 bg-gray-200 border-4 border-[#6E5A52] rounded-full z-0" />
-                            {simulationRunning && (
-                              <div className="absolute bottom-[-22px] left-1/4 right-1/4 h-2 bg-red-500 rounded-full animate-pulse blur-[1px]" />
-                            )}
-
-                            {/* Liquid fill animation */}
-                            <div
-                              className="w-full bg-gradient-to-t from-white to-[#F5DACF] border-t-3 border-[#6E5A52] rounded-b-[40px] transition-all duration-1000 z-10 opacity-90 text-center flex flex-col items-center justify-center p-2"
-                              style={{ height: `${Math.max(simProgress, 15)}%` }}
-                            >
-                              <span className="text-2xl mt-1">
-                                {simProgress >= 100 ? "🍲" : simProgress >= 75 ? "🍳" : simProgress >= 25 ? "🥛" : ""}
-                              </span>
+                          {selectedLevelId === 2 ? (
+                            /* Budare Hotplate Grill */
+                            <div className={`w-52 h-44 border-4 border-[#6E5A52] rounded-full relative px-4 flex flex-col justify-end bg-gradient-to-b from-gray-700 to-gray-900 shadow-[8px_8px_0px_0px_#6E5A52] transition-transform duration-300 ${
+                              simulationRunning ? "scale-105" : ""
+                            }`}>
+                              <div className="absolute inset-4 rounded-full border-4 border-dashed border-yellow-500/20 animate-spin z-0" style={{ animationDuration: "10s" }} />
+                              <div className="absolute bottom-[-16px] left-8 right-8 h-4 bg-gray-500 border-4 border-[#6E5A52] rounded-full z-0" />
+                              
+                              <div
+                                className="w-full bg-gradient-to-t from-yellow-300 to-yellow-500 border-3 border-[#6E5A52] rounded-full transition-all duration-1000 z-10 opacity-90 text-center flex flex-col items-center justify-center p-2 mb-6"
+                                style={{ height: `${Math.max(simProgress, 20)}%` }}
+                              >
+                                <span className="text-4xl mt-1">
+                                  {simProgress >= 100 ? "🫓" : simProgress >= 75 ? "🧀" : simProgress >= 25 ? "🥣" : "🥛"}
+                                </span>
+                              </div>
                             </div>
-                          </div>
+                          ) : selectedLevelId === 3 ? (
+                            /* Cancha de Tejo */
+                            <div className={`w-52 h-44 border-4 border-[#6E5A52] rounded-[24px] relative px-4 flex flex-col justify-end bg-gradient-to-b from-[#7A3F26] to-[#542B1A] shadow-[8px_8px_0px_0px_#6E5A52] transition-transform duration-300 ${
+                              simulationRunning ? "scale-105" : ""
+                            }`}>
+                              <div className="absolute inset-2 border-2 border-dashed border-[#F5DACF]/10 text-[8px] font-mono font-bold text-[#F5DACF]/30 text-center pt-2">
+                                CANCHA DE GREDA TURMEQUÉ
+                              </div>
+                              <div className="absolute bottom-[-16px] left-[-10px] right-[-10px] h-4 bg-yellow-900 border-4 border-[#6E5A52] rounded-full z-0" />
+                              
+                              <div
+                                className="w-full bg-gradient-to-t from-gray-300 to-zinc-400 border-t-3 border-[#6E5A52] rounded-t-[30px] transition-all duration-1000 z-10 opacity-95 text-center flex flex-col items-center justify-center p-2 mb-2"
+                                style={{ height: `${Math.max(simProgress, 20)}%` }}
+                              >
+                                <span className="text-4xl">
+                                  {simProgress >= 100 ? "💥" : simProgress >= 75 ? "🎯" : simProgress >= 25 ? "💪" : "⚖️"}
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            /* Changua Soup cooking Pot */
+                            <div className={`w-52 h-44 border-4 border-[#6E5A52] rounded-b-[48px] rounded-t-[16px] relative px-4 flex flex-col justify-end bg-gradient-to-b from-[#F5DACF] to-[#E0BFBE] shadow-[8px_8px_0px_0px_#6E5A52] transition-transform duration-300 ${
+                              simulationRunning ? "scale-105" : ""
+                            }`}>
+                              <div className="absolute left-[-20px] top-[40px] w-6 h-10 border-4 border-[#6E5A52] rounded-l-lg bg-[#E2E2E9]" />
+                              <div className="absolute right-[-20px] top-[40px] w-6 h-10 border-4 border-[#6E5A52] rounded-r-lg bg-[#E2E2E9]" />
+                              <div className="absolute bottom-[-16px] left-[-24px] right-[-24px] h-4 bg-gray-200 border-4 border-[#6E5A52] rounded-full z-0" />
+                              {simulationRunning && (
+                                <div className="absolute bottom-[-22px] left-1/4 right-1/4 h-2 bg-red-500 rounded-full animate-pulse blur-[1px]" />
+                              )}
+                              
+                              <div
+                                className="w-full bg-gradient-to-t from-white to-[#F5DACF] border-t-3 border-[#6E5A52] rounded-b-[40px] transition-all duration-1000 z-10 opacity-90 text-center flex flex-col items-center justify-center p-2"
+                                style={{ height: `${Math.max(simProgress, 15)}%` }}
+                              >
+                                <span className="text-2xl mt-1">
+                                  {simProgress >= 100 ? "🍲" : simProgress >= 75 ? "🥚" : simProgress >= 25 ? "🥛" : ""}
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         {/* Simulator dialog speech tip */}
