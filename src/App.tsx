@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Compass,
   Users,
@@ -24,11 +24,19 @@ import LoginScreen from "./components/LoginScreen";
 import StudentApp from "./components/StudentApp";
 import TeacherDashboard from "./components/TeacherDashboard";
 
+import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot } from "firebase/firestore";
+import { db, auth, loginWithGoogle, logoutUser, handleFirestoreError, OperationType } from "./firebase";
+
 export default function App() {
   // Login / Session credentials state
-  const [isLoggedIn, setIsLoggedIn] = useState(true); // default logged in to show immediately
+  const [isLoggedIn, setIsLoggedIn] = useState(false); // start logged out so Google and Demo login work beautifully
   const [userRole, setUserRole] = useState<"student" | "teacher">("student");
   const [userName, setUserName] = useState("Mateo Jiménez");
+
+  // Firebase state
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [isLoadingFirebase, setIsLoadingFirebase] = useState(false);
 
   // Global shared synchronization state
   const [coins, setCoins] = useState(125);
@@ -52,9 +60,230 @@ export default function App() {
   // Roster lists for teachers
   const [studentsRoster, setStudentsRoster] = useState<ClassStudent[]>(INITIAL_STUDENTS);
 
-  // Compute active roster to keep Mateo Jiménez in sync with student panel updates in real-time
+  // Stateful wrappers to update local React state and fire write operations to Firestore in the background
+  const setCoinsAndPersist = (val: React.SetStateAction<number>) => {
+    setCoins(prev => {
+      const next = typeof val === "function" ? (val as Function)(prev) : val;
+      if (auth.currentUser) {
+        const path = `users/${auth.currentUser.uid}`;
+        updateDoc(doc(db, "users", auth.currentUser.uid), {
+          coins: next,
+          updatedAt: new Date().toISOString()
+        }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, path));
+      }
+      return next;
+    });
+  };
+
+  const setMissionsAndPersist = (val: React.SetStateAction<Mission[]>) => {
+    setMissions(prev => {
+      const next = typeof val === "function" ? (val as Function)(prev) : val;
+      if (auth.currentUser) {
+        const path = `users/${auth.currentUser.uid}`;
+        updateDoc(doc(db, "users", auth.currentUser.uid), {
+          missionsState: JSON.stringify(next),
+          updatedAt: new Date().toISOString()
+        }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, path));
+      }
+      return next;
+    });
+  };
+
+  const setLevelsTrackAndPersist = (val: React.SetStateAction<any[]>) => {
+    setLevelsTrack(prev => {
+      const next = typeof val === "function" ? (val as Function)(prev) : val;
+      if (auth.currentUser) {
+        const path = `users/${auth.currentUser.uid}`;
+        updateDoc(doc(db, "users", auth.currentUser.uid), {
+          levelsState: JSON.stringify(next),
+          updatedAt: new Date().toISOString()
+        }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, path));
+      }
+      return next;
+    });
+  };
+
+  const setStudentASTAndPersist = (val: React.SetStateAction<BlockCodeAST>) => {
+    setStudentAST(prev => {
+      const next = typeof val === "function" ? (val as Function)(prev) : val;
+      if (auth.currentUser) {
+        const path = `users/${auth.currentUser.uid}`;
+        updateDoc(doc(db, "users", auth.currentUser.uid), {
+          studentASTState: JSON.stringify(next),
+          updatedAt: new Date().toISOString()
+        }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, path));
+      }
+      return next;
+    });
+  };
+
+  const setChatHistoryAndPersist = (val: React.SetStateAction<ChatMessage[]>) => {
+    setChatHistory(prev => {
+      const next = typeof val === "function" ? (val as Function)(prev) : val;
+      if (auth.currentUser) {
+        const path = `users/${auth.currentUser.uid}`;
+        // Enviar último mensaje como un documento para auditabilidad detallada
+        const lastMsg = next[next.length - 1];
+        if (lastMsg) {
+          const chatDocRef = doc(collection(db, "users", auth.currentUser.uid, "chat"));
+          setDoc(chatDocRef, {
+            sender: lastMsg.sender,
+            message: lastMsg.message,
+            timestamp: lastMsg.timestamp
+          }).catch((err) => handleFirestoreError(err, OperationType.CREATE, `${path}/chat`));
+        }
+
+        updateDoc(doc(db, "users", auth.currentUser.uid), {
+          chatHistoryState: JSON.stringify(next),
+          updatedAt: new Date().toISOString()
+        }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, path));
+      }
+      return next;
+    });
+  };
+
+  // Monitor Firebase Auth events
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setFirebaseUser(user);
+      if (user) {
+        setIsLoadingFirebase(true);
+        const path = `users/${user.uid}`;
+        try {
+          const userDocRef = doc(db, "users", user.uid);
+          
+          let userDocSnap;
+          try {
+            userDocSnap = await getDoc(userDocRef);
+          } catch (getErr) {
+            handleFirestoreError(getErr, OperationType.GET, path);
+          }
+
+          if (userDocSnap.exists()) {
+            const data = userDocSnap.data();
+            setUserRole(data.role || "student");
+            setUserName(data.name || user.displayName || "Explorador Google");
+            if (data.coins !== undefined) setCoins(data.coins);
+            if (data.levelsState) {
+              try { setLevelsTrack(JSON.parse(data.levelsState)); } catch (e) {}
+            }
+            if (data.missionsState) {
+              try { setMissions(JSON.parse(data.missionsState)); } catch (e) {}
+            }
+            if (data.studentASTState) {
+              try { setStudentAST(JSON.parse(data.studentASTState)); } catch (e) {}
+            }
+            if (data.chatHistoryState) {
+              try { setChatHistory(JSON.parse(data.chatHistoryState)); } catch (e) {}
+            }
+          } else {
+            // First-time signup with Google: Create Firestore central record profile
+            const pendingRole = (localStorage.getItem("pending_google_role") as "student" | "teacher") || "student";
+            const newDoc = {
+              uid: user.uid,
+              name: user.displayName || "Explorador Google",
+              email: user.email || "",
+              avatar: "🤠",
+              coins: 125,
+              streak: 3,
+              xp: 240,
+              role: pendingRole,
+              levelsState: JSON.stringify(LEVELS_TRACK),
+              missionsState: JSON.stringify(INITIAL_MISSIONS),
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+
+            try {
+              await setDoc(userDocRef, newDoc);
+            } catch (setErr) {
+              handleFirestoreError(setErr, OperationType.CREATE, path);
+            }
+
+            setUserRole(pendingRole);
+            setUserName(newDoc.name);
+            setCoins(newDoc.coins);
+            setLevelsTrack(LEVELS_TRACK);
+            setMissions(INITIAL_MISSIONS);
+          }
+          setIsLoggedIn(true);
+        } catch (error) {
+          console.error("Firestore authentication profile initialization error:", error);
+        } finally {
+          setIsLoadingFirebase(false);
+        }
+      } else {
+        // Not authenticated
+        setIsLoggedIn(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Sync real registered students from Firestore for the TeacherDashboard in real-time
+  useEffect(() => {
+    if (!firebaseUser) return;
+
+    const q = query(collection(db, "users"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const loaded: ClassStudent[] = [];
+      snapshot.forEach((snap) => {
+        const d = snap.data();
+        if (d.role === "student") {
+          let lvlTrack = LEVELS_TRACK;
+          let chatH = chatHistory;
+          let codeA = studentAST;
+
+          try {
+            if (d.levelsState) lvlTrack = JSON.parse(d.levelsState);
+          } catch(e) {}
+          try {
+            if (d.chatHistoryState) chatH = JSON.parse(d.chatHistoryState);
+          } catch(e) {}
+          try {
+            if (d.studentASTState) codeA = JSON.parse(d.studentASTState);
+          } catch(e) {}
+
+          const l2 = lvlTrack.find(l => l.id === 2);
+          const levelingProgress = l2 ? l2.progress : 60;
+
+          loaded.push({
+            id: snap.id,
+            name: d.name || "Estudiante",
+            grade: "Grado 6°",
+            avatar: d.avatar || "🤠",
+            readingSpeed: 92,
+            levelingProgress: levelingProgress,
+            status: levelingProgress >= 100 ? "Excelente" : "En Progreso",
+            subject: "Pensamiento Algorítmico",
+            recentTopic: "Variables y Bucles",
+            chatHistory: chatH,
+            codeAST: codeA,
+            errorsCount: d.streak > 0 ? 0 : 2
+          });
+        }
+      });
+
+      if (loaded.length > 0) {
+        setStudentsRoster(prev => {
+          const mapper = new Map();
+          INITIAL_STUDENTS.forEach(student => mapper.set(student.name, student));
+          loaded.forEach(student => mapper.set(student.name, student));
+          return Array.from(mapper.values());
+        });
+      }
+    }, (err) => {
+      console.error("Error snapping users list:", err);
+    });
+
+    return () => unsubscribe();
+  }, [firebaseUser]);
+
+  // Compute active roster to keep Mateo Jiménez or Google user in sync with student panel updates
   const activeRoster = studentsRoster.map(student => {
-    if (student.name === "Mateo Jiménez") {
+    const isCurrentActive = student.name === userName || (student.id === firebaseUser?.uid);
+    if (isCurrentActive) {
       const level2 = levelsTrack.find(l => l.id === 2);
       const levelingProgress = level2 ? level2.progress : 60;
       return {
@@ -73,6 +302,7 @@ export default function App() {
   // Manual role toggle for exploring both student & teacher consoles instantly!
   const [activeFrame, setActiveFrame] = useState<"student" | "teacher" | "about">("student");
 
+  // Traditional manual Login (Demostrativo Offline)
   const handleLogin = (role: "student" | "teacher", name: string) => {
     setUserRole(role);
     setUserName(name);
@@ -80,12 +310,35 @@ export default function App() {
     setActiveFrame(role === "student" ? "student" : "teacher");
   };
 
-  const handleLogout = () => {
+  const handleGoogleLogin = async (role: "student" | "teacher") => {
+    setIsLoadingFirebase(true);
+    try {
+      localStorage.setItem("pending_google_role", role);
+      await loginWithGoogle();
+      setActiveFrame(role === "student" ? "student" : "teacher");
+    } catch (e) {
+      console.error("Failed to login with Google:", e);
+    } finally {
+      setIsLoadingFirebase(false);
+    }
+  };
+
+  const handleLogoutClick = async () => {
+    try {
+      await logoutUser();
+    } catch(e) {}
     setIsLoggedIn(false);
+    setFirebaseUser(null);
   };
 
   if (!isLoggedIn) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return (
+      <LoginScreen
+        onLogin={handleLogin}
+        onGoogleLogin={handleGoogleLogin}
+        isLoadingFirebase={isLoadingFirebase}
+      />
+    );
   }
 
   return (
@@ -157,7 +410,7 @@ export default function App() {
           </div>
 
           <button
-            onClick={handleLogout}
+            onClick={handleLogoutClick}
             className="p-2 border-2 border-[#6E5A52] rounded-xl hover:bg-gray-50 active:translate-y-0.5 shadow-[2px_2px_0px_0px_#6E5A52] bg-white text-[#984351] cursor-pointer"
             title="Cerrar sesión"
           >
@@ -189,15 +442,15 @@ export default function App() {
             {activeFrame === "student" && (
               <StudentApp
                 coins={coins}
-                setCoins={setCoins}
+                setCoins={setCoinsAndPersist}
                 missions={missions}
-                setMissions={setMissions}
+                setMissions={setMissionsAndPersist}
                 levelsTrack={levelsTrack}
-                setLevelsTrack={setLevelsTrack}
+                setLevelsTrack={setLevelsTrackAndPersist}
                 studentAST={studentAST}
-                setStudentAST={setStudentAST}
+                setStudentAST={setStudentASTAndPersist}
                 chatHistory={chatHistory}
-                setChatHistory={setChatHistory}
+                setChatHistory={setChatHistoryAndPersist}
                 coachMode={coachMode}
               />
             )}
@@ -209,7 +462,7 @@ export default function App() {
                 students={activeRoster}
                 setStudents={setStudentsRoster}
                 chatHistory={chatHistory}
-                setChatHistory={setChatHistory}
+                setChatHistory={setChatHistoryAndPersist}
               />
             )}
 

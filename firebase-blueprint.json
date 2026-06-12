@@ -1,0 +1,58 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Student or Teacher profile metadata and game progress",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Auth user ID" },
+        "name": { "type": "string", "description": "Full name or display name" },
+        "email": { "type": "string", "description": "Email address" },
+        "avatar": { "type": "string", "description": "Emoji or avatar image key" },
+        "coins": { "type": "integer", "description": "Student coins accumulated" },
+        "streak": { "type": "integer", "description": "Current daily streak" },
+        "xp": { "type": "integer", "description": "Experience points" },
+        "role": { "type": "string", "enum": ["student", "teacher"], "description": "Role in the learning portal" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Messages sent inside the personalized AI tutor chat",
+      "type": "object",
+      "properties": {
+        "sender": { "type": "string", "enum": ["student", "api"] },
+        "message": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sender", "message", "timestamp"]
+    },
+    "LevelCode": {
+      "title": "LevelCode",
+      "description": "Saved blocks workspace AST per level",
+      "type": "object",
+      "properties": {
+        "levelId": { "type": "integer" },
+        "blocksJson": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["levelId", "blocksJson"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User accounts and central metadata"
+    },
+    "users/{userId}/chat/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Learning chat history message entries"
+    },
+    "users/{userId}/code/{levelId}": {
+      "schema": "LevelCode",
+      "description": "Workspace code configurations by active level"
+    }
+  }
+}

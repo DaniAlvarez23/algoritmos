@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Reusable core security functions
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    
+    function isSignedIn() { 
+      return request.auth != null; 
+    }
+    
+    function isOwner(userId) { 
+      return isSignedIn() && request.auth.uid == userId; 
+    }
+    
+    function incoming() { 
+      return request.resource.data; 
+    }
+    
+    function existing() { 
+      return resource.data; 
+    }
+
+    // Default-deny safety catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users profiles and central state
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      
+      function isValidUser(user) {
+        return user.keys().hasAll(['uid', 'name', 'email', 'role'])
+          && user.uid is string && user.uid == userId
+          && user.name is string && user.name.size() > 0 && user.name.size() <= 100
+          && user.email is string && user.email.size() > 0 && user.email.size() <= 128
+          && user.role is string && (user.role == 'student' || user.role == 'teacher')
+          && (!('coins' in user) || user.coins is int)
+          && (!('streak' in user) || user.streak is int)
+          && (!('xp' in user) || user.xp is int)
+          && (!('avatar' in user) || user.avatar is string)
+          && (!('createdAt' in user) || user.createdAt is timestamp || user.createdAt is string)
+          && (!('updatedAt' in user) || user.updatedAt is timestamp || user.updatedAt is string);
+      }
+
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      
+      allow update: if isOwner(userId) && isValidUser(incoming()) && (
+        incoming().uid == existing().uid &&
+        incoming().role == existing().role
+      );
+      
+      allow delete: if false;
+
+      // Personalized AI learning tutor chat history
+      match /chat/{messageId} {
+        function isValidChatMessage(msg) {
+          return msg.keys().hasAll(['sender', 'message', 'timestamp'])
+            && msg.sender is string && (msg.sender == 'student' || msg.sender == 'api')
+            && msg.message is string && msg.message.size() <= 10000
+            && msg.timestamp is string;
+        }
+
+        allow read, write: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidChatMessage(incoming());
+      }
+
+      // Educational blocks programmingworkspace by level
+      match /code/{levelId} {
+        function isValidLevelCode(codeItem) {
+          return codeItem.keys().hasAll(['levelId', 'blocksJson'])
+            && codeItem.levelId is int
+            && codeItem.blocksJson is string && codeItem.blocksJson.size() <= 100000;
+        }
+
+        allow read: if isOwner(userId) || (isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher');
+        allow write: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidLevelCode(incoming());
+      }
+    }
+  }
+}

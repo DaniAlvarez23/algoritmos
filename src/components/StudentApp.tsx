@@ -235,7 +235,7 @@ export default function StudentApp({
         { step: "Echar harina en el tazón 🥣", status: "pending" as const },
         { step: "Adicionar agua con sal 🧂", status: "pending" as const },
         { step: "Hacer amasar en bucle 🔄", status: "pending" as const },
-        { step: "Poner en plancha caliente 🫓", status: "pending text-[#1A1B20]" as const }
+        { step: "Poner en plancha caliente 🫓", status: "pending" as const }
       ];
     } else if (selectedLevelId === 3) {
       stepsTrack = [
@@ -282,20 +282,29 @@ export default function StudentApp({
           if (!isCorrect) {
             if (selectedLevelId === 2) {
               if (errorType === "sin_harina" && currentStep === 0) isStepError = true;
-              if (errorType === "agua_antes_harina" && currentStep === 1) isStepError = true;
-              if (errorType === "sin_amasar" && currentStep === 2) isStepError = true;
-              if (errorType === "asar_antes_amasar" && currentStep === 3) isStepError = true;
+              else if (errorType === "agua_antes_harina" && currentStep === 1) isStepError = true;
+              else if (errorType === "sin_amasar" && currentStep === 2) isStepError = true;
+              else if (errorType === "asar_antes_amasar" && currentStep === 3) isStepError = true;
+              else if (currentStep === 0 && !["sin_harina", "agua_antes_harina", "sin_amasar", "asar_antes_amasar"].includes(errorType || "")) {
+                isStepError = true;
+              }
             } else if (selectedLevelId === 3) {
               if (errorType === "sin_apuntar" && currentStep === 0) isStepError = true;
-              if (errorType === "lanzar_antes_apuntar" && currentStep === 1) isStepError = true;
-              if (errorType === "sin_condicion_mecha" && currentStep === 2) isStepError = true;
-              if (errorType === "celebrar_antes_mecha" && currentStep === 3) isStepError = true;
+              else if (errorType === "lanzar_antes_apuntar" && currentStep === 1) isStepError = true;
+              else if (errorType === "sin_condicion_mecha" && currentStep === 2) isStepError = true;
+              else if (errorType === "celebrar_antes_mecha" && currentStep === 3) isStepError = true;
+              else if (currentStep === 0 && !["sin_apuntar", "lanzar_antes_apuntar", "sin_condicion_mecha", "celebrar_antes_mecha"].includes(errorType || "")) {
+                isStepError = true;
+              }
             } else {
               if (errorType === "sin_olla" && currentStep === 0) isStepError = true;
-              if (errorType === "orden_hervir_fallido" && currentStep === 1) isStepError = true;
-              if (errorType === "huevos_sin_hervir" && currentStep === 2) isStepError = true;
-              if (errorType === "huevos_pre_hervir" && currentStep === 2) isStepError = true;
-              if (errorType === "falta_calado" && currentStep === 3) isStepError = true;
+              else if (errorType === "orden_hervir_fallido" && currentStep === 1) isStepError = true;
+              else if (errorType === "huevos_sin_hervir" && currentStep === 2) isStepError = true;
+              else if (errorType === "huevos_pre_hervir" && currentStep === 2) isStepError = true;
+              else if (errorType === "falta_calado" && currentStep === 3) isStepError = true;
+              else if (currentStep === 0 && !["sin_olla", "orden_hervir_fallido", "huevos_sin_hervir", "huevos_pre_hervir", "falta_calado"].includes(errorType || "")) {
+                isStepError = true;
+              }
             }
             // Fallback: failed instantly on step 0
             if ((errorType === "lienzo_vacio" || errorType === "sin_inicio") && currentStep === 0) {
@@ -367,6 +376,19 @@ export default function StudentApp({
                 return { ...level, status: "activo" as const, progress: 0 };
               }
               return level;
+            });
+          });
+
+          // Synchronize successfully resolved level with the daily student missions
+          setMissions(prev => {
+            return prev.map(mission => {
+              if (selectedLevelId === 1 && mission.id === "m1") {
+                return { ...mission, completed: true, progress: 1 };
+              }
+              if (selectedLevelId === 3 && mission.id === "m2") {
+                return { ...mission, completed: true, progress: 3 };
+              }
+              return mission;
             });
           });
         }
