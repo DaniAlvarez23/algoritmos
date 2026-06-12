@@ -30,7 +30,7 @@ import { db, auth, loginWithGoogle, logoutUser, handleFirestoreError, OperationT
 
 export default function App() {
   // Login / Session credentials state
-  const [isLoggedIn, setIsLoggedIn] = useState(false); // start logged out so Google and Demo login work beautifully
+  const [isLoggedIn, setIsLoggedIn] = useState(true); // default logged in to show immediately
   const [userRole, setUserRole] = useState<"student" | "teacher">("student");
   const [userName, setUserName] = useState("Mateo Jiménez");
 
@@ -213,8 +213,7 @@ export default function App() {
           setIsLoadingFirebase(false);
         }
       } else {
-        // Not authenticated
-        setIsLoggedIn(false);
+        // Not authenticated - preserve student/teacher offline demo state without forcing Google Login
       }
     });
 
