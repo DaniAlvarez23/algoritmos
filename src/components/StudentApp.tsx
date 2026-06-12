@@ -254,7 +254,11 @@ export default function StudentApp({
     }
     setSimStepsHistory(stepsTrack);
 
-    // Call the server endpoint to evaluate if workspace is active, or use local sandbox
+    // Call the server endpoint to evaluate if workspace is active, or use local sandbox with client fallback
+    let isCorrect = false;
+    let errorType: string | null = null;
+    let explanation = "Ejecución correcta.";
+
     try {
       const response = await fetch("/api/gemini/evaluate", {
         method: "POST",
@@ -266,10 +270,105 @@ export default function StudentApp({
         })
       });
 
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}`);
+      }
+
       const reqData = await response.json();
-      const isCorrect = reqData.scaffolding_evaluation?.is_correct_execution ?? false;
-      const errorType = reqData.scaffolding_evaluation?.error_type_detected ?? null;
-      const explanation = reqData.student_visible_response ?? "Ejecución correcta.";
+      isCorrect = reqData.scaffolding_evaluation?.is_correct_execution ?? false;
+      errorType = reqData.scaffolding_evaluation?.error_type_detected ?? null;
+      explanation = reqData.student_visible_response ?? "Ejecución correcta.";
+    } catch (err) {
+      console.warn("API evaluation failed, using high-fidelity local fallback:", err);
+      const seq = workspaceBlocks.map((b: any) => b.type);
+      const sequenceStr = seq.join(" -> ");
+      isCorrect = true;
+      errorType = null;
+
+      if (seq.length === 0) {
+        explanation = "¡Hola, parce! Tu lienzo de código está vacío. Recuerda iniciar con el bloque 🏁 'Al empezar' para que sepamos por dónde arrancar.";
+        isCorrect = false;
+        errorType = "lienzo_vacio";
+      } else if (seq[0] !== "al_empezar") {
+        explanation = "¡Caramba, mi llave! 🤠 Para que el robot sepa cuándo iniciar el proceso, debes arrancar con el bloque 'Al empezar' 🏁 en la posición #1. ¡Ajústalo y volvemos a intentar!";
+        isCorrect = false;
+        errorType = "sin_inicio";
+      } else {
+        if (selectedLevelId === 2) {
+          if (!seq.includes("verter_harina")) {
+            explanation = "¡Caray, parce! Pusiste a amasar pero... ¡se te olvidó echar la harina de maíz en el tazón! 🥣 ¿De dónde va a salir la arepa? Añade ese bloque.";
+            isCorrect = false;
+            errorType = "sin_harina";
+          } else if (seq.includes("agregar_agua_sal") && seq.indexOf("agregar_agua_sal") < seq.indexOf("verter_harina")) {
+            explanation = "¡Ojo, mi llave! Primero echa la harina en el tazón 🥣, y luego le añades el agua con sal para que no se te haga un pegote en la mesa.";
+            isCorrect = false;
+            errorType = "agua_antes_harina";
+          } else if (!seq.includes("repetir_amasar")) {
+            explanation = "¡Qué calavera! 💀 Pusiste la masa en la plancha directa... ¡pero no la amasaste! 🫓 Esa arepa te va a quedar dura como una teja boyacense. Agrégale el bucle de amasar.";
+            isCorrect = false;
+            errorType = "sin_amasar";
+          } else if (seq.includes("asar_arepa") && seq.indexOf("asar_arepa") < seq.indexOf("repetir_amasar")) {
+            explanation = "¡Ave María, parce! Pusiste a asar la arepa en la plancha antes de amasarla. ¡Primero amasa bien 3 veces para que tenga suavidad y quesito!";
+            isCorrect = false;
+            errorType = "asar_antes_amasar";
+          } else {
+            explanation = "¡Qué masa tan suave, mi llave! 🎉 Lograste amasar la arepa boyacense perfecta con queso y mantequilla. ¡Pura delicia de Tibasosa terminada!";
+          }
+        } else if (selectedLevelId === 3) {
+          if (!seq.includes("apuntar_cancha")) {
+            explanation = "¡Ojo al charco, mi llave! 🎯 Vas a lanzar el tejo sin apuntar a la cancha. ¡Puedes tumbarle el tinto al compadre! Primero apunta bien en la greda.";
+            isCorrect = false;
+            errorType = "sin_apuntar";
+          } else if (seq.includes("lanzar_tejo") && seq.indexOf("lanzar_tejo") < seq.indexOf("apuntar_cancha")) {
+            explanation = "¡Qué berraquera! Lanzaste el tejo antes de apuntar. ¡Eso es tiro perdido, parce! Primero apunta y luego lanza con fuerza.";
+            isCorrect = false;
+            errorType = "lanzar_antes_apuntar";
+          } else if (!seq.includes("si_golpea_mecha")) {
+            explanation = "¡Casi, parce! Lanzaste el tejo pero... ¿y si golpea la mecha con pólvora? 💥 Necesitas el bloque condicional 'Si el tejo golpea la mecha' para evaluar si hiciste Moñona.";
+            isCorrect = false;
+            errorType = "sin_condicion_mecha";
+          } else if (seq.includes("celebrar_monona") && seq.indexOf("celebrar_monona") < seq.indexOf("si_golpea_mecha")) {
+            explanation = "¡Epa! Celebraste la moñona antes de comprobar si el tejo realmente golpeó la mecha. ¡Tranquilo, mi llave! Primero evalúa si hubo explosión.";
+            isCorrect = false;
+            errorType = "celebrar_antes_mecha";
+          } else {
+            explanation = "¡PUMMMM! 💥 ¡Hiciste Moñona, parce! Sonó la pólvora, estalló la mecha y toda la tribuna te aplaude con un buen tinto caliente. ¡Excelente algoritmo condicional!";
+          }
+        } else {
+          if (!seq.includes("poner_olla")) {
+            explanation = "¡Qué calavera! 💀 Pusiste a cocinar cosas pero... ¡se te olvidó poner la olla en la estufa! 🍲 ¿Dónde vamos a hervir la leche, parce? Añade ese bloque después del inicio.";
+            isCorrect = false;
+            errorType = "sin_olla";
+          } else if (seq.includes("esperar_hervir") && seq.indexOf("esperar_hervir") < seq.indexOf("poner_olla")) {
+            explanation = "¡Ave María! 🍳 Esperaste que hirviera la leche antes de colocar la olla en la estufa. ¡Ojo con el flujo de las cosas! Primero pones la olla con leche, luego esperas que caliente.";
+            isCorrect = false;
+            errorType = "orden_hervir_fallido";
+          } else if (seq.includes("agregar_huevos") && !seq.includes("esperar_hervir")) {
+            explanation = "¡Ojo al charco! 🥚 Agregaste los huevos pero la leche no ha hervido. En Colombia, si echas el huevo en leche fría se nos deshace y queda baboso. ¡Primero pon a hervir la leche con sal!";
+            isCorrect = false;
+            errorType = "huevos_sin_hervir";
+          } else if (seq.includes("agregar_huevos") && seq.indexOf("agregar_huevos") < seq.indexOf("esperar_hervir")) {
+            explanation = "¡Casi, mi llave! 🌿 Los huevos se echan justamente DESPUÉS de que la leche hierva con burbujas. Intenta mover el bloque 'Esperar a que hierva' ⏳ antes de 'Agregar huevos' 🥚.";
+            isCorrect = false;
+            errorType = "huevos_pre_hervir";
+          } else if (!seq.includes("agregar_calado")) {
+            explanation = "¡Delicioso aroma! Leche hervida y huevos cocidos... pero falta el toque crujiente. ¡Agrégale calado (pan boyacense) 🍞 a esa changua antes de servir!";
+            isCorrect = false;
+            errorType = "falta_calado";
+          } else {
+            explanation = "¡Ay caray, qué delicia! 🎉 Lograste armar la secuencia perfecta de la Changua Bogotana: Inicio 🏁 -> Olla en estufa 🍲 -> Hervir ⏳ -> Huevos 🥚 -> Calado 🍞. ¡Eres todo un maestro programador y chef!";
+          }
+        }
+      }
+
+      if (coachMode === "Technical") {
+        explanation = `[AST ANALYSER] ${isCorrect ? "COMPILATION SUCCESSFUL" : "FLOW COMPILATION ERROR"}: code=${errorType || "OK"}. sequence="${sequenceStr}". Sequence integrity checks passed=${isCorrect}. Advice: ensure FIFO logic.`;
+      } else if (coachMode === "Silent") {
+        explanation = isCorrect ? "Ejecución correcta." : `Error: ${errorType}.`;
+      }
+    }
+
+    try {
 
       // Let's animate steps
       let currentStep = 0;
